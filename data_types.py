@@ -5,7 +5,7 @@ import json
 import uuid
 import warnings
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, TypeVar
+from typing import Dict, List, Optional, TypeVar, Any
 
 import numpy as np
 from pydantic import BaseModel, Field
@@ -70,27 +70,38 @@ class ToolCall(object):
             "type": self.tool_call_type,
             "function": self.function,
         }
-
-
+        
 def add_inner_thoughts_to_tool_call(
     tool_call: ToolCall,
     inner_thoughts: str,
     inner_thoughts_key: str,
 ) -> ToolCall:
     """Add inner thoughts (arg + value) to a tool call"""
-    # because the kwargs are stored as strings, we need to load then write the JSON dicts
-    try:
-        # load the args list
-        func_args = json.loads(tool_call.function["arguments"])
-        # add the inner thoughts to the args list
-        func_args[inner_thoughts_key] = inner_thoughts
-        # create the updated tool call (as a string)
-        updated_tool_call = copy.deepcopy(tool_call)
-        updated_tool_call.function["arguments"] = json.dumps(func_args, ensure_ascii=JSON_ENSURE_ASCII)
-        return updated_tool_call
-    except json.JSONDecodeError as e:
-        warnings.warn(f"Failed to put inner thoughts in kwargs: {e}")
-        raise e
+    def parse_and_fix_json(json_str: str) -> Dict[str, Any]:
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError:
+            # Attempt to fix common JSON issues
+            fixed_str = json_str.replace("'", '"')  # Replace single quotes with double quotes
+            fixed_str = fixed_str.replace("True", "true").replace("False", "false")  # Fix boolean values
+            try:
+                return json.loads(fixed_str)
+            except json.JSONDecodeError:
+                # If still can't parse, return an empty dict
+                warnings.warn(f"Failed to parse JSON even after attempted fixes: {json_str}")
+                return {}
+
+    # Parse and potentially fix the arguments
+    func_args = parse_and_fix_json(tool_call.function["arguments"])
+    
+    # Add the inner thoughts to the args dict
+    func_args[inner_thoughts_key] = inner_thoughts
+    
+    # Create the updated tool call
+    updated_tool_call = copy.deepcopy(tool_call)
+    updated_tool_call.function["arguments"] = json.dumps(func_args, ensure_ascii=JSON_ENSURE_ASCII)
+    
+    return updated_tool_call
 
 
 class Message(Record):
