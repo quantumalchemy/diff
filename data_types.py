@@ -70,7 +70,8 @@ class ToolCall(object):
             "type": self.tool_call_type,
             "function": self.function,
         }
-        
+
+
 def add_inner_thoughts_to_tool_call(
     tool_call: ToolCall,
     inner_thoughts: str,
